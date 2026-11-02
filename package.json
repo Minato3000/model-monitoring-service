@@ -123,6 +123,14 @@
               }
             }
           }
+        },
+        "llmmonitor.excludeContainers": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "Container names (or parts of names) to hide from the panel. Routers, gateways and load balancers are skipped automatically; label a container `llm.monitor=ignore` to hide it as well."
         }
       }
     }
@@ -139,11 +147,11 @@
     "publish:ovsx": "ovsx publish --no-dependencies"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "@vscode/vsce": "^2.15.0",
-    "ovsx": "^0.10.0"
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^4.1.0",
+    "ovsx": "^0.10.0",
+    "typescript": "^5.0.0"
   },
   "author": "Raghuram",
   "repository": {

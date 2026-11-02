@@ -5,7 +5,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const { pollTarget } = require('../out/adapters');
-const { emptyGpu } = require('../out/docker');
+const { emptyGpu, isGateway } = require('../out/docker');
 
 const expectations = {
   'ok-vllm':      s => s.status === 'ok' && !s.offline,
@@ -19,10 +19,27 @@ const expectations = {
 };
 const ports = { 'ok-vllm': 9001, 'ok-sglang': 9002, 'no-metrics': 9003, 'bad-key': 9004, 'slow': 9005, 'junk-metrics': 9008, 'refused': 9099 };
 
+// Gateways and load balancers must not become cards; real servers must.
+const gw = [
+  ['sglang-router', 'lmsysorg/sglang:latest', ['python3', '-m', 'sglang_router.launch_router', '--worker-urls', 'http://a:30000'], true],
+  ['vllm-router', 'ghcr.io/vllm-project/production-stack/router:latest', ['/app/router'], true],
+  ['edge', 'nginx:1.27', ['nginx', '-g', 'daemon off;'], true],
+  ['llm-gateway', 'ghcr.io/berriai/litellm:main', ['--config', 'c.yaml'], true],
+  ['qwen3', 'vllm/vllm-openai:latest', ['vllm', 'serve', 'Qwen/Qwen3-8B', '--port', '8000'], false],
+  ['llama', 'lmsysorg/sglang:latest', ['python3', '-m', 'sglang.launch_server', '--model-path', 'org/router-model-8B'], false],
+  ['glm', 'vllm/vllm-openai:latest', ['--model', 'zai-org/GLM-4.5-Air', '--tensor-parallel-size', '2'], false]
+];
+let gwFailed = 0;
+for (const [name, image, args, expect] of gw) {
+  const got = isGateway(name, image, args);
+  if (got !== expect) gwFailed++;
+  console.log(`${got === expect ? 'PASS' : 'FAIL'}  gateway-check ${name.padEnd(13)} -> ${got ? 'skipped' : 'monitored'}`);
+}
+
 (async () => {
   const srv = spawn(process.execPath, [path.join(__dirname, 'mock-server.js')], { stdio: 'ignore' });
   await new Promise(r => setTimeout(r, 700));
-  let failed = 0;
+  let failed = gwFailed;
   const targets = Object.keys(expectations).map(name => ({
     key: name, name, engine: name === 'ok-sglang' ? 'sglang' : 'vllm',
     baseUrl: name === 'bad-url' ? 'not a url' : `http://127.0.0.1:${ports[name]}`

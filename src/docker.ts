@@ -1,5 +1,5 @@
 import { execFile } from 'child_process';
-import { ContainerInfo, Engine, Target } from './types';
+import { ContainerInfo, Engine, GpuSummary, Target } from './types';
 import { classifyError, httpGet, httpGetBuffer } from './prom';
 
 const DEFAULT_PORT: Record<Engine, number> = { vllm: 8000, sglang: 30000 };
@@ -8,6 +8,15 @@ const inspectCache = new Map<string, Target | null>();
 async function api(socket: string, path: string): Promise<string> {
   try { return await httpGet(`http://docker${path}`, { socketPath: socket, timeout: 4000 }); }
   catch (e) { throw classifyError(e, 'Docker daemon'); }
+}
+
+/** Routers, gateways, proxies and load balancers sit in front of the servers and have no GPU or engine metrics of their own. */
+const GATEWAY = /(router|gateway|proxy|balancer|litellm|nginx|haproxy|envoy|traefik|caddy|kong|istio)/i;
+
+export function isGateway(name: string, image: string, args: string[]): boolean {
+  // Launch tokens only: the first few, minus anything that looks like a model id (org/name) or a flag.
+  const head = args.filter(a => !a.startsWith('-') && !a.includes('/')).slice(0, 4).join(' ');
+  return GATEWAY.test(name) || GATEWAY.test(image.split(':')[0]) || GATEWAY.test(head);
 }
 
 /** The command line decides; the image name is only used when the command says nothing (e.g. a bare `--model` list). */
@@ -30,13 +39,31 @@ function argValue(args: string[], flag: string): string | undefined {
   return undefined;
 }
 
+/** Which GPUs docker gave the container: --gpus device=0,1 / --gpus all, or NVIDIA_VISIBLE_DEVICES. */
+function gpuHintOf(info: any, envVal: (k: string) => string | undefined): string[] | undefined {
+  const reqs: any[] = info.HostConfig?.DeviceRequests ?? [];
+  for (const r of reqs) {
+    if (!(r.Capabilities ?? []).flat().includes('gpu')) { continue; }
+    if (r.DeviceIDs?.length) { return r.DeviceIDs.map(String); }
+    if (r.Count === -1) { return ['all']; }
+    if (r.Count > 0) { return undefined; }   // "any N GPUs": cannot tell which
+  }
+  const v = envVal('NVIDIA_VISIBLE_DEVICES');
+  if (v && v !== 'void' && v !== 'none') { return v === 'all' ? ['all'] : v.split(',').map(x => x.trim()); }
+  return undefined;
+}
+
 async function inspectTarget(socket: string, id: string): Promise<Target | null> {
   const info = JSON.parse(await api(socket, `/containers/${id}/json`));
   const cfg = info.Config ?? {};
   const args: string[] = [...(cfg.Entrypoint ?? []), ...(cfg.Cmd ?? []), ...(info.Args ?? [])]
     .flatMap((a: string) => String(a).split(/\s+/));
   const image: string = cfg.Image ?? '';
-  const engine = classify(cfg.Labels?.['llm.monitor'], image, args);
+  const label = String(cfg.Labels?.['llm.monitor'] ?? '').toLowerCase();
+  if (['ignore', 'false', 'off', 'none', 'no'].includes(label)) { return null; }   // explicit opt-out
+  const cname = String(info.Name ?? id).replace(/^\//, '');
+  if (label !== 'vllm' && label !== 'sglang' && isGateway(cname, image, args)) { return null; }
+  const engine = classify(label, image, args);
   if (!engine) { return null; }
 
   const port = Number(argValue(args, '--port')) || DEFAULT_PORT[engine];
@@ -67,7 +94,7 @@ async function inspectTarget(socket: string, id: string): Promise<Target | null>
   };
   const maxRunning = Number(argValue(args, '--max-running-requests') ?? argValue(args, '--max-num-seqs')) || undefined;
   const hints = { quant: argValue(args, '--quantization'), dtype: argValue(args, '--dtype'), kvDtype: argValue(args, '--kv-cache-dtype') };
-  return { key: id, engine, name: container.name, baseUrl: `http://${host}:${hostPort}`, apiKey, maxRunning, hints, container };
+  return { key: id, engine, name: container.name, baseUrl: `http://${host}:${hostPort}`, apiKey, maxRunning, hints, container, gpuHint: gpuHintOf(info, envVal) };
 }
 
 export async function discoverContainers(socket: string): Promise<Target[]> {
@@ -116,11 +143,14 @@ export interface GpuInfo {
   usedByPid: Map<number, number>;
   uuidByPid: Map<number, string>;
   totalByUuid: Map<string, number>;
+  /** Every GPU the driver reports, by index. */
+  gpus: GpuSummary[];
+  indexByUuid: Map<string, number>;
   /** Why GPU numbers are missing, when they are. */
   problem?: string;
 }
 
-export const emptyGpu = (): GpuInfo => ({ usedByPid: new Map(), uuidByPid: new Map(), totalByUuid: new Map() });
+export const emptyGpu = (): GpuInfo => ({ usedByPid: new Map(), uuidByPid: new Map(), totalByUuid: new Map(), gpus: [], indexByUuid: new Map() });
 
 function smi(smiPath: string, args: string[], fail: { msg?: string }): Promise<string> {
   return new Promise(resolve => {
@@ -140,7 +170,7 @@ export async function gpuInfo(smiPath: string): Promise<GpuInfo> {
   const fail: { msg?: string } = {};
   const [apps, gpus] = await Promise.all([
     smi(smiPath, ['--query-compute-apps=pid,used_memory,gpu_uuid'], fail),
-    smi(smiPath, ['--query-gpu=uuid,memory.total'], fail)
+    smi(smiPath, ['--query-gpu=index,uuid,name,memory.total,memory.used'], fail)
   ]);
   const out = emptyGpu();
   out.problem = fail.msg;
@@ -153,9 +183,13 @@ export async function gpuInfo(smiPath: string): Promise<GpuInfo> {
     }
   }
   for (const line of gpus.split('\n')) {
-    const [uuid, mib] = line.split(',').map(x => x.trim());
-    if (uuid && Number(mib) > 0) { out.totalByUuid.set(uuid, Number(mib) * MIB); }
+    const [idx, uuid, name, total, used] = line.split(',').map(x => x.trim());
+    if (!uuid || !(Number(total) > 0) || !Number.isInteger(Number(idx))) { continue; }
+    out.totalByUuid.set(uuid, Number(total) * MIB);
+    out.indexByUuid.set(uuid, Number(idx));
+    out.gpus.push({ index: Number(idx), name: name || undefined, totalBytes: Number(total) * MIB, usedBytes: Number(used) >= 0 ? Number(used) * MIB : undefined });
   }
+  out.gpus.sort((a, b) => a.index - b.index);
   return out;
 }
 

@@ -12,6 +12,8 @@ First public release.
 - Tokens/s, per-request tokens/s, prefill rate, running and queued requests, KV cache, host RAM, TTFT, inter-token latency (with best values seen) and prefix-cache hit rate.
 - GPU memory breakdown: weights, KV used, KV free and runtime.
 - Light, dark and high-contrast theme support that follows VS Code without a reload.
+- Models grouped under the GPU (or GPUs) they run on, with each GPU's memory use in the group header; bordered cards so neighbours are easy to tell apart.
+- Routers, gateways, proxies and load balancers are skipped. New `llmmonitor.excludeContainers` setting and the `llm.monitor=ignore` label hide other containers.
 - Responsive layout that reflows with the panel width.
 - Clear failure states: offline, starting, timeout, auth failure, missing metrics, Docker unreachable, missing `nvidia-smi`, stalled extension host.
 - `llmmonitor.extraEndpoints` for servers outside Docker or on other hosts.

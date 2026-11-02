@@ -160,10 +160,18 @@ export async function pollTarget(
         if (used.length) {
           gpuBytes = used.reduce((acc, pid) => acc + gpu.usedByPid.get(pid)!, 0);
           const uuids = new Set(used.map(pid => gpu.uuidByPid.get(pid)).filter((u): u is string => !!u));
+          const ids = [...uuids].map(u => gpu.indexByUuid.get(u)).filter((i): i is number => i !== undefined);
+          if (ids.length) { snap.gpuIds = [...new Set(ids)].sort((a, b) => a - b); }
           const totals = [...uuids].map(u => gpu.totalByUuid.get(u));
           if (totals.length && totals.every(x => x !== undefined)) { gpuTotal = totals.reduce((acc, x) => acc! + x!, 0); }
         }
       } catch { /* docker top failed */ }
+    }
+    if (!snap.gpuIds?.length && t.gpuHint?.length) {
+      // nvidia-smi could not map the container's processes: fall back to what docker handed the container.
+      const all = gpu.gpus.map(g => g.index);
+      const ids = t.gpuHint.includes('all') ? all : t.gpuHint.map(Number).filter(n => Number.isInteger(n) && (!all.length || all.includes(n)));
+      if (ids.length) { snap.gpuIds = [...new Set(ids)].sort((a, b) => a - b); }
     }
     fillSizes(snap, s, gpuBytes, gpuTotal);
     if (snap.tps !== undefined && gpuBytes) { snap.tpsPerGiB = snap.tps / (gpuBytes / 1024 ** 3); }

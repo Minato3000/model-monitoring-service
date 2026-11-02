@@ -12,3 +12,6 @@ tsconfig.json
 .vscodeignore
 docs/**
 .github/**
+
+.env
+.env.*

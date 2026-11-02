@@ -19,6 +19,7 @@ export function getWebviewContent(): string {
       --runtime: var(--vscode-charts-purple, #b180d7);
       --tile:    color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
       --track:   color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+      --edge:    var(--vscode-contrastBorder, color-mix(in srgb, var(--vscode-foreground) 16%, transparent));
       /* spacing scale: every gap and padding comes from here */
       --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
       --indent: 0px;
@@ -64,9 +65,27 @@ export function getWebviewContent(): string {
     .head-line[hidden], #empty[hidden] { display: none; }
 
     /* ---------- model card ---------- */
-    .card { container-type: inline-size; border-radius: var(--r-card); margin-bottom: var(--s2); transition: background-color .35s var(--ease); }
-    .card.open { background: color-mix(in srgb, var(--vscode-foreground) 3.5%, transparent); }
-    .card:hover, .card.open:hover { background: var(--hover); }
+    .card { container-type: inline-size; border-radius: var(--r-card); margin-bottom: var(--s3);
+            border: 1px solid var(--edge); background: color-mix(in srgb, var(--vscode-foreground) 2%, transparent);
+            transition: background-color .35s var(--ease), border-color .35s var(--ease); }
+    .card.open { background: color-mix(in srgb, var(--vscode-foreground) 3.5%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, var(--edge)); }
+    .card:hover, .card.open:hover { background: var(--hover); border-color: color-mix(in srgb, var(--vscode-foreground) 30%, transparent); }
+    .card.open:hover { border-color: color-mix(in srgb, var(--accent) 60%, var(--edge)); }
+    .card.offline { border-style: dashed; }
+    .card:last-child { margin-bottom: 0; }
+
+    /* ---------- GPU groups ---------- */
+    .grp { margin-bottom: var(--s5); }
+    .grp:last-child { margin-bottom: 0; }
+    .grp-h { padding: var(--s2) var(--s1) var(--s3); border-bottom: 1px solid var(--edge); margin-bottom: var(--s3); }
+    .grp-t { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); }
+    .grp-n { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text); white-space: nowrap; }
+    .grp-n small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--dim); margin-left: var(--s2); font-size: 10.5px; }
+    .grp-m { font-size: 10.5px; color: var(--dim); white-space: nowrap; }
+    .grp-bar { height: 3px; border-radius: 2px; background: var(--track); margin-top: var(--s2); overflow: hidden; }
+    .grp-bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; transition: width .9s var(--ease); }
+    .grp-bar i.hot { background: var(--crit); } .grp-bar i.warm { background: var(--warn); }
+    .grp-h[hidden] { display: none; }
     .top { padding: var(--s4) var(--s3); border-radius: var(--r-card); cursor: pointer; outline-offset: -1px; }
 
     .l1 { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
@@ -90,7 +109,7 @@ export function getWebviewContent(): string {
     .alert small { display: block; color: var(--dim); font-size: 10.5px; margin-top: 2px; }
     .alert[hidden], .gpunote[hidden] { display: none; }
     .gpunote { font-size: 10.5px; color: var(--warn); margin-top: var(--s2); }
-    body.vscode-high-contrast .tile, body.vscode-high-contrast-light .tile, body.vscode-high-contrast .card, body.vscode-high-contrast-light .card,
+    body.vscode-high-contrast .tile, body.vscode-high-contrast-light .tile,
     body.vscode-high-contrast .banner, body.vscode-high-contrast-light .banner { outline: 1px solid var(--vscode-contrastBorder, var(--text)); outline-offset: -1px; }
     body.vscode-high-contrast .mem, body.vscode-high-contrast-light .mem { outline: 1px solid var(--vscode-contrastBorder, var(--text)); }
     body.vscode-high-contrast .chart .ln, body.vscode-high-contrast-light .chart .ln { stroke-width: 2.2; }
@@ -595,6 +614,60 @@ export function getWebviewContent(): string {
   }
   new MutationObserver(() => onTheme(document.body.className)).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
+  /* ---------- GPU groups: models are listed under the GPU(s) they run on ---------- */
+  const groups = new Map();
+  const gibShort = b => (b / GIB).toFixed(b / GIB >= 100 ? 0 : 1);
+  function groupFor(key) {
+    let g = groups.get(key);
+    if (!g) {
+      const el = document.createElement('section');
+      el.className = 'grp'; el.dataset.group = key;
+      el.innerHTML = '<div class="grp-h"><div class="grp-t"><span class="grp-n"></span><span class="grp-m num"></span></div><div class="grp-bar"><i></i></div></div><div class="grp-body"></div>';
+      g = { el, head: el.querySelector('.grp-h'), name: el.querySelector('.grp-n'), mem: el.querySelector('.grp-m'), bar: el.querySelector('.grp-bar i'), body: el.querySelector('.grp-body') };
+      groups.set(key, g);
+    }
+    return g;
+  }
+  function renderGroups(models, gpus) {
+    const byIdx = new Map(gpus.map(g => [g.index, g]));
+    const keyOf = m => (m.gpuIds && m.gpuIds.length ? m.gpuIds.join('+') : 'none');
+    const buckets = new Map();
+    models.forEach(m => { const k = keyOf(m); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(m); });
+    const keys = [...buckets.keys()].sort((a, b) => a === 'none' ? 1 : b === 'none' ? -1 : parseInt(a, 10) - parseInt(b, 10) || (a < b ? -1 : 1));
+    const anyKnown = keys.some(k => k !== 'none');
+    const list = $('cards');
+
+    for (const [k, g] of groups) if (!buckets.has(k)) { g.el.remove(); groups.delete(k); }
+    keys.forEach((k, gi) => {
+      const g = groupFor(k);
+      if (list.children[gi] !== g.el) list.insertBefore(g.el, list.children[gi] || null);
+      // header: "GPU 0 · NVIDIA L40S" with the memory in use across the GPUs of this group
+      const ids = k === 'none' ? [] : k.split('+').map(Number);
+      const infos = ids.map(i => byIdx.get(i)).filter(Boolean);
+      g.head.hidden = !anyKnown;
+      const names = [...new Set(infos.map(i => i.name).filter(Boolean))].join(', ');
+      g.name.innerHTML = (k === 'none' ? 'GPU unknown' : ids.length > 1 ? 'GPUs ' + ids.join(', ') : 'GPU ' + ids[0]) + (names ? '<small>' + esc(names.replace(/^NVIDIA\s+/i, '')) + '</small>' : '');
+      const total = infos.reduce((a, i) => a + (i.totalBytes || 0), 0), used = infos.reduce((a, i) => a + (i.usedBytes || 0), 0);
+      const known = total > 0 && infos.every(i => i.usedBytes !== undefined);
+      setText(g.mem, known ? gibShort(used) + ' / ' + gibShort(total) + ' GiB' : '');
+      const p = known ? Math.min(100, used / total * 100) : 0;
+      g.bar.style.width = p + '%'; g.bar.className = p >= 92 ? 'hot' : p >= 75 ? 'warm' : '';
+      g.bar.parentElement.hidden = !known;
+
+      buckets.get(k).forEach((m, i) => {
+        try {
+          let c = cards.get(m.key);
+          if (!c) { c = build(m); cards.set(m.key, c); }
+          if (g.body.children[i] !== c.el) g.body.insertBefore(c.el, g.body.children[i] || null);
+          update(c, m);
+        } catch (err) {
+          // one broken card must never take the whole panel down
+          console.error('card render failed', m && m.key, err);
+        }
+      });
+    });
+  }
+
   window.addEventListener('message', e => {
     const msg = e.data;
     if (!msg || typeof msg !== 'object') return;
@@ -616,18 +689,7 @@ export function getWebviewContent(): string {
 
     const live = new Set(models.map(m => m.key));
     for (const [k, c] of cards) if (!live.has(k)) { c.el.remove(); cards.delete(k); }
-    const list = $('cards');
-    models.forEach((m, i) => {
-      try {
-        let c = cards.get(m.key);
-        if (!c) { c = build(m); cards.set(m.key, c); }
-        if (list.children[i] !== c.el) list.insertBefore(c.el, list.children[i] || null);
-        update(c, m);
-      } catch (err) {
-        // one broken card must never take the whole panel down
-        console.error('card render failed', m && m.key, err);
-      }
-    });
+    renderGroups(models, msg.gpus || []);
   });
   vscode.postMessage({ type: 'ready' });
 </script>

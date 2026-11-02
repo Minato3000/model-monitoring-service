@@ -22,6 +22,8 @@ A VS Code sidebar panel that finds the **vLLM** and **SGLang** servers running i
 ## Features
 
 - **Automatic discovery.** Finds vLLM and SGLang containers through the Docker socket, works out their port, API key and launch options, and adds or removes cards as containers come and go.
+- **Grouped by GPU.** Models are listed under the GPU they run on ("GPU 0 · L40S", with that GPU's memory in use), and a model spread over several GPUs gets its own group. Every card has its own border, so neighbouring models are easy to tell apart.
+- **Only inference servers.** Routers, gateways, proxies and load balancers (SGLang router, LiteLLM, nginx and similar) are skipped, and you can hide any other container by name or label.
 - **Smooth live throughput chart.** A scrolling 60-sample chart with a dotted peak line, and a marker for every completed request.
 - **The numbers that matter.** Tokens/s, tokens/s per request, prefill tokens/s, running and queued requests against the slot limit, KV cache use, host RAM, TTFT, inter-token latency (with the best value seen), and prefix-cache hit rate.
 - **GPU memory breakdown.** One bar splitting the container's GPU memory into weights, KV cache used, KV cache free and runtime (CUDA graphs, activations).
@@ -33,17 +35,21 @@ A VS Code sidebar panel that finds the **vLLM** and **SGLang** servers running i
 
 ## Screenshots
 
-| Collapsed list with a mix of states | Server offline |
+| Models grouped by GPU | Collapsed list with a mix of states |
 |:--:|:--:|
-| <img src="docs/images/dark-collapsed.png" width="300" alt="Collapsed cards: healthy, offline and auth failure"> | <img src="docs/images/offline.png" width="300" alt="Offline card with the cause and last-seen time"> |
+| <img src="docs/images/multi-gpu.png" width="300" alt="Cards grouped under GPU 0, GPUs 1 and 2, and GPU 2"> | <img src="docs/images/dark-collapsed.png" width="300" alt="Collapsed cards: healthy, offline and auth failure"> |
 
-| Docker unreachable | High-contrast theme |
+| Server offline | Docker unreachable |
 |:--:|:--:|
-| <img src="docs/images/docker-down.png" width="300" alt="Docker unreachable banner with an Open settings button"> | <img src="docs/images/high-contrast.png" width="300" alt="High-contrast theme"> |
+| <img src="docs/images/offline.png" width="300" alt="Offline card with the cause and last-seen time"> | <img src="docs/images/docker-down.png" width="300" alt="Docker unreachable banner with an Open settings button"> |
 
-| Narrow panel | Wide panel |
+| High-contrast theme | Narrow panel |
 |:--:|:--:|
-| <img src="docs/images/narrow.png" width="190" alt="Narrow layout, one column"> | <img src="docs/images/wide.png" width="460" alt="Wide layout, four columns"> |
+| <img src="docs/images/high-contrast.png" width="300" alt="High-contrast theme"> | <img src="docs/images/narrow.png" width="190" alt="Narrow layout, one column"> |
+
+| Wide panel |
+|:--:|
+| <img src="docs/images/wide.png" width="560" alt="Wide layout, four columns"> |
 
 The screenshots are rendered from the real panel with sample data (`npm run preview`), not from a live server.
 
@@ -122,6 +128,7 @@ After a failure the monitor re-reads the model name and restarts its counters, s
 | `llmmonitor.dockerSocket` | `/var/run/docker.sock` | Rootless Docker and Podman use a different path |
 | `llmmonitor.nvidiaSmiPath` | `nvidia-smi` | Path to the `nvidia-smi` binary |
 | `llmmonitor.extraEndpoints` | `[]` | Servers outside Docker, or on another host |
+| `llmmonitor.excludeContainers` | `[]` | Container names (or parts of names) to hide from the panel |
 
 Example for a remote server:
 
@@ -131,14 +138,16 @@ Example for a remote server:
 ]
 ```
 
-A container is treated as vLLM or SGLang when its command line mentions `vllm` or `sglang`. To force it, add the label `llm.monitor=vllm` or `llm.monitor=sglang`.
+A container is treated as vLLM or SGLang when its command line mentions `vllm` or `sglang`. To force it, add the label `llm.monitor=vllm` or `llm.monitor=sglang`; to hide a container, use `llm.monitor=ignore` or list it in `llmmonitor.excludeContainers`.
+
+**Gateways and load balancers are not shown.** A container is skipped when its name, image or launch command contains `router`, `gateway`, `proxy`, `balancer`, `litellm`, `nginx`, `haproxy`, `envoy`, `traefik`, `caddy`, `kong` or `istio`. They have no GPU or engine metrics of their own. Support for showing them is planned. The `llm.monitor=vllm|sglang` label overrides the skip if a real server is caught by mistake.
 
 ## How it works
 
 - **Discovery:** the Docker Engine API over the unix socket. The endpoint comes from `--port`, the published port, or the container's IP. `--api-key` or the `API_KEY` environment variable is sent as a Bearer token.
 - **Live numbers:** the engine's Prometheus `/metrics`, polled on the refresh interval. Rates come from counter deltas between polls, and counter resets are ignored.
 - **Static numbers:** weights and KV allocation are parsed once from the container's startup log, and parameters and precision from the model's `config.json` and weight files when they are reachable through a bind mount. Servers started with `--log-level warning` do not print the KV allocation, so that value is estimated or shown as "—".
-- **GPU memory:** the container's PIDs (`docker top`) matched against `nvidia-smi --query-compute-apps`.
+- **GPU memory and grouping:** the container's PIDs (`docker top`) matched against `nvidia-smi --query-compute-apps`, which also tells which GPU each process uses. If `nvidia-smi` cannot map the processes, the GPUs docker assigned to the container (`--gpus device=0,1`, `NVIDIA_VISIBLE_DEVICES`) are used. Servers whose GPU is unknown (remote endpoints, no `nvidia-smi`) are listed under "GPU unknown" at the end.
 - **Theming:** the panel uses only VS Code's theme variables, with state colours defined once per card in CSS, so a theme change needs no reload.
 
 ## Development
@@ -154,7 +163,7 @@ Tools for working on the UI and the failure paths without a GPU:
 | Command | What it does |
 |---|---|
 | `npm run mock` | Starts fake vLLM and SGLang servers that fail in different ways (401, 404, 500, timeout, counter reset, junk metrics, dropped sockets) and prints the `extraEndpoints` settings to paste |
-| `npm run test:scenarios` | Polls those servers through the real adapters and checks each outcome |
+| `npm run test:scenarios` | Polls those servers through the real adapters, checks each outcome, and checks that gateways are skipped and real servers are not |
 | `npm run preview` | Writes `out/preview.html`: the panel in a browser with dark, light and high-contrast themes, three widths and every state |
 
 ```

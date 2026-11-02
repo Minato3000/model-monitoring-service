@@ -2,6 +2,9 @@ export type Engine = 'vllm' | 'sglang';
 
 export interface Notice { level: 'info' | 'warn' | 'error'; text: string; action?: 'openSettings' | 'retry' }
 
+/** One physical GPU, for the group headers in the panel. */
+export interface GpuSummary { index: number; name?: string; totalBytes?: number; usedBytes?: number }
+
 export interface Mount { source: string; destination: string }
 
 export interface ContainerInfo {
@@ -24,6 +27,8 @@ export interface Target {
   /** Precision flags from the launch command (--quantization, --dtype, --kv-cache-dtype). */
   hints?: { quant?: string; dtype?: string; kvDtype?: string };
   container?: ContainerInfo;
+  /** GPUs the container was started with (docker --gpus / NVIDIA_VISIBLE_DEVICES): indices, or 'all'. Fallback when nvidia-smi can't map processes. */
+  gpuHint?: string[];
 }
 
 /** One card in the panel. Optional numbers are undefined when the source does not report them. */
@@ -45,6 +50,8 @@ export interface ModelSnapshot {
   failures?: number;
   /** Set when GPU memory could not be read (nvidia-smi missing or failing). */
   gpuNote?: string;
+  /** Indices of the GPUs this server runs on, sorted. Empty or missing when unknown. */
+  gpuIds?: number[];
   maxLen?: number;
   maxRunning?: number;
   dtype?: string;

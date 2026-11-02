@@ -2,13 +2,13 @@ import * as vscode from 'vscode';
 import { discoverContainers, emptyGpu, gpuInfo } from './docker';
 import { pollTarget, pruneStates } from './adapters';
 import { classifyError } from './prom';
-import { ModelSnapshot, Notice, Target } from './types';
+import { GpuSummary, ModelSnapshot, Notice, Target } from './types';
 import { getWebviewContent } from './webview';
 
 interface ExtraEndpoint { engine: 'vllm' | 'sglang'; url: string; name?: string; apiKey?: string }
 
 type Outgoing =
-  | { type: 'models'; models: ModelSnapshot[]; notice?: Notice; interval: number; at: number }
+  | { type: 'models'; models: ModelSnapshot[]; gpus: GpuSummary[]; notice?: Notice; interval: number; at: number }
   | { type: 'error'; message: string; interval: number; at: number };
 
 class LlmMonitorViewProvider implements vscode.WebviewViewProvider {
@@ -65,7 +65,8 @@ class LlmMonitorViewProvider implements vscode.WebviewViewProvider {
 
       let notice: Notice | undefined;
       let targets: Target[] = [];
-      try { targets = await discoverContainers(socket); }
+      const exclude = (cfg.get<string[]>('excludeContainers', []) ?? []).filter(x => typeof x === 'string' && x.trim()).map(x => x.trim().toLowerCase());
+      try { targets = (await discoverContainers(socket)).filter(t => !exclude.some(x => t.name.toLowerCase().includes(x))); }
       catch (e) {
         const he = classifyError(e, 'Docker daemon');
         const fixable = he.kind === 'permission' || he.kind === 'nosocket';
@@ -84,7 +85,7 @@ class LlmMonitorViewProvider implements vscode.WebviewViewProvider {
       const gpu = targets.some(t => t.container) ? await gpuInfo(smi) : emptyGpu();
       const models = await Promise.all(targets.map(t => pollTarget(t, socket, gpu)));
       models.sort((a, b) => a.source.localeCompare(b.source));
-      this.send({ type: 'models', models, notice, interval: this.interval(), at: Date.now() });
+      this.send({ type: 'models', models, gpus: gpu.gpus, notice, interval: this.interval(), at: Date.now() });
     } catch (e) {
       this.send({ type: 'error', message: `The monitor hit an unexpected error: ${(e as Error).message}`, interval: this.interval(), at: Date.now() });
     } finally {

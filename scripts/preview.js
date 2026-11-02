@@ -34,11 +34,15 @@ const controls = `
   const good = (o = {}) => Object.assign({ key: 'ok', engine: 'vllm', model: 'Qwen/Qwen3-8B-FP8', source: 'qwen3', endpoint: 'http://127.0.0.1:8000', status: 'ok', state: 'busy',
     tps: 184, peakTps: 240, tpsHistory: hist(150, 40), queueHistory: [], completedHistory: done, running: 4, queued: 0, maxRunning: 16, kvUtil: 42, kvAllocBytes: 30e9, kvUsedBytes: 12e9,
     weightsBytes: 9e9, otherBytes: 3e9, gpuBytes: 42e9, ramBytes: 6e9, ramLimitBytes: 64e9, ttftMs: 140, itlMs: 11, bestTtftMs: 90, bestItlMs: 9, cacheHit: 40, promptTps: 400, tpsPerReq: 46, peakTpsPerReq: 70,
-    wPrec: 'FP8', wBits: 8, params: 8e9, maxLen: 32768 }, o);
+    wPrec: 'FP8', wBits: 8, params: 8e9, maxLen: 32768, gpuIds: [0] }, o);
+  const GPUS = [{ index: 0, name: 'NVIDIA L40S', totalBytes: 48e9, usedBytes: 39e9 }, { index: 1, name: 'NVIDIA L40S', totalBytes: 48e9, usedBytes: 44.5e9 }, { index: 2, name: 'NVIDIA L40S', totalBytes: 48e9, usedBytes: 2e9 }];
   const off = (kind, message, o = {}) => good(Object.assign({ key: 'bad-' + kind, model: 'org/' + kind + '-8B', source: kind, status: 'error', state: 'error', offline: true, errorKind: kind, message,
     lastOkAt: Date.now() - 42000, failures: 3, tps: undefined, running: undefined, queued: undefined }, o));
   const SC = {
-    'Healthy': () => ({ models: [good(), good({ key: 'sg', engine: 'sglang', model: 'meta-llama/Llama-3.1-8B', source: 'llama', state: 'idle', tps: 0, tpsHistory: hist(5, 2) })] }),
+    'Healthy': () => ({ models: [good(), good({ key: 'sg', engine: 'sglang', model: 'meta-llama/Llama-3.1-8B', source: 'llama', state: 'idle', tps: 0, tpsHistory: hist(5, 2), gpuIds: [1] })] }),
+    'Multi GPU': () => ({ models: [good(), good({ key: 'b', model: 'Qwen/Qwen3-4B', source: 'qwen3-4b', tps: 96, tpsHistory: hist(90, 20) }),
+      good({ key: 'c', engine: 'sglang', model: 'zai-org/GLM-4.5-Air', source: 'glm', gpuIds: [1, 2], tps: 61, tpsHistory: hist(60, 15), params: 106e9 }),
+      off('refused', 'The server is not accepting connections.', { gpuIds: [2] })] }),
     'Saturated': () => ({ models: [good({ state: 'saturated', running: 16, queued: 7, kvUtil: 96 })] }),
     'Offline': () => ({ models: [off('refused', 'The server is not accepting connections. It may be starting up, loading the model, or have crashed.')] }),
     'Starting': () => ({ models: [off('starting', 'Starting up. The server is not accepting connections yet, usually because it is still loading the model.', { lastOkAt: undefined, failures: 1, tpsHistory: [], completedHistory: [] })] }),
@@ -51,14 +55,14 @@ const controls = `
     'Mixed': () => ({ models: [good(), off('refused', 'The server is not accepting connections.'), off('auth', 'The server rejected the API key (HTTP 401).', { lastOkAt: undefined })], notice: { level: 'warn', text: 'An entry in llmmonitor.extraEndpoints is invalid. It was skipped.', action: 'openSettings' } }),
     'Ext. error': () => ({ type: 'error', message: 'The monitor hit an unexpected error: boom' })
   };
-  const send = name => { const d = SC[name](); window.postMessage(Object.assign({ type: 'models', interval: 2000, at: Date.now() }, d), '*'); };
+  const send = name => { const d = SC[name](); window.postMessage(Object.assign({ type: 'models', interval: 2000, at: Date.now(), gpus: GPUS }, d), '*'); };
   const setCls = (theme, w) => { document.body.className = theme + ' ' + (w || ''); document.documentElement.className = theme; };
   const pv = document.getElementById('pv');
   const add = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; pv.appendChild(b); };
   ${JSON.stringify(Object.keys(THEMES))}.forEach(t => add(t.replace('vscode-', ''), () => { setCls(t, document.body.dataset.w || ''); window.postMessage({ type: 'theme', kind: t }, '*'); }));
   [['narrow', 'narrow'], ['normal', ''], ['wide', 'wide']].forEach(([l, c]) => add('w:' + l, () => { document.body.dataset.w = c; setCls(document.body.className.split(' ').find(x => x.startsWith('vscode-')), c); }));
   Object.keys(SC).forEach(n => add(n, () => send(n)));
-  add('stale', () => { window.postMessage({ type: 'models', models: SC['Healthy']().models, interval: 2000, at: Date.now() - 60000 }, '*'); });
+  add('stale', () => { window.postMessage({ type: 'models', models: SC['Healthy']().models, gpus: GPUS, interval: 2000, at: Date.now() - 60000 }, '*'); });
   setCls('vscode-dark', '');
   send('Healthy');
   // #theme,State,width  e.g. #light,Offline,wide  (used for screenshots)
