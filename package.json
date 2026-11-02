@@ -1,0 +1,140 @@
+{
+  "name": "llm-monitoring-service",
+  "displayName": "LLM Server Monitor",
+  "description": "Live monitoring of running vLLM and SGLang containers in your VS Code sidebar: model, KV cache, requests, queue and tokens per second.",
+  "version": "0.1.0",
+  "publisher": "Minato3000",
+  "license": "MIT",
+  "keywords": [
+    "vllm",
+    "sglang",
+    "llm",
+    "docker",
+    "kv cache",
+    "inference",
+    "monitor",
+    "sidebar"
+  ],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "llm-monitoring-service-container",
+          "title": "LLM Server Monitor",
+          "icon": "icons/llm-monitor.svg"
+        }
+      ]
+    },
+    "views": {
+      "llm-monitoring-service-container": [
+        {
+          "type": "webview",
+          "id": "llmmonitor.panel",
+          "name": "Models",
+          "icon": "icons/llm-monitor.svg",
+          "contextualTitle": "LLM Server Monitor"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "llmmonitor.refresh",
+        "title": "LLM Server Monitor: Refresh Now",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "llmmonitor.refresh",
+          "when": "view == llmmonitor.panel",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "LLM Server Monitor",
+      "properties": {
+        "llmmonitor.refreshInterval": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 30000,
+          "description": "Polling interval in milliseconds."
+        },
+        "llmmonitor.dockerSocket": {
+          "type": "string",
+          "default": "/var/run/docker.sock",
+          "description": "Path to the Docker Engine unix socket (rootless Docker and Podman use a different path)."
+        },
+        "llmmonitor.nvidiaSmiPath": {
+          "type": "string",
+          "default": "nvidia-smi",
+          "description": "Path to the nvidia-smi executable (used for per-container GPU memory)."
+        },
+        "llmmonitor.extraEndpoints": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Servers that are not Docker containers, or that live on another host. Each entry: `{ \"engine\": \"vllm\" | \"sglang\", \"url\": \"http://host:port\", \"name\": \"optional label\", \"apiKey\": \"optional\" }`.",
+          "items": {
+            "type": "object",
+            "required": [
+              "engine",
+              "url"
+            ],
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "vllm",
+                  "sglang"
+                ]
+              },
+              "url": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "apiKey": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "mock": "node scripts/mock-server.js",
+    "test:scenarios": "npm run compile && node scripts/test-scenarios.js",
+    "preview": "npm run compile && node scripts/preview.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "@vscode/vsce": "^2.15.0"
+  },
+  "author": "Raghuram",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Minato3000/model-monitoring-service.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Minato3000/model-monitoring-service/issues"
+  },
+  "homepage": "https://github.com/Minato3000/model-monitoring-service#readme"
+}

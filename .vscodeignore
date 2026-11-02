@@ -1,0 +1,13 @@
+.vscode/**
+src/**
+.gitignore
+tsconfig.json
+node_modules/**
+out/**/*.map
+scripts/**
+out/preview.html
+src/**
+tsconfig.json
+**/*.map
+.vscodeignore
+docs/**
