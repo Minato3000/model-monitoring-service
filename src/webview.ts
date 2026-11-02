@@ -6,7 +6,7 @@ export function getWebviewContent(): string {
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LLM Server Monitor</title>
+  <title>LLM Monitor Service</title>
   <style>
     :root {
       --text:    var(--vscode-foreground);

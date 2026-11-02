@@ -49,6 +49,6 @@ jobs:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
       - name: Attach the .vsix to the GitHub release
         if: github.event_name == 'release'
-        run: gh release upload "${{ github.event.release.tag_name }}" extension.vsix#llm-monitoring-service-${{ github.event.release.tag_name }}.vsix --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" extension.vsix#llm-monitor-service-${{ github.event.release.tag_name }}.vsix --clobber
         env:
           GH_TOKEN: ${{ github.token }}

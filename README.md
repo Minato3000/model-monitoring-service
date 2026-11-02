@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" alt="LLM Server Monitor: live vLLM and SGLang metrics in the VS Code sidebar" width="100%">
+  <img src="docs/banner.png" alt="LLM Monitor Service: live vLLM and SGLang metrics in the VS Code sidebar" width="100%">
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
   <img alt="engines" src="https://img.shields.io/badge/engines-vLLM%20%C2%B7%20SGLang-a78bfa">
 </p>
 
-# LLM Server Monitor
+# LLM Monitor Service
 
 A VS Code sidebar panel that finds the **vLLM** and **SGLang** servers running in Docker on your machine and shows what each one is doing, live: throughput, KV cache, request slots, latency and GPU memory. No dashboards to host and no Prometheus or Grafana to set up. Start a container and its card appears.
 
@@ -64,9 +64,9 @@ The screenshots are rendered from the real panel with sample data (`npm run prev
 
 ### From a `.vsix`
 
-1. Download `llm-monitoring-service-0.1.0.vsix` from the repository's Releases page, or build it yourself (below).
-2. Run `code --install-extension llm-monitoring-service-0.1.0.vsix`, or use **Extensions → … → Install from VSIX…**.
-3. Open the **LLM Server Monitor** icon in the activity bar.
+1. Download `llm-monitor-service-0.1.0.vsix` from the repository's Releases page, or build it yourself (below).
+2. Run `code --install-extension llm-monitor-service-0.1.0.vsix`, or use **Extensions → … → Install from VSIX…**.
+3. Open the **LLM Monitor Service** icon in the activity bar.
 
 ### From source
 
@@ -74,8 +74,8 @@ The screenshots are rendered from the real panel with sample data (`npm run prev
 git clone https://github.com/Minato3000/model-monitoring-service.git
 cd model-monitoring-service
 npm install
-npm run package          # compiles and writes llm-monitoring-service-0.1.0.vsix
-code --install-extension llm-monitoring-service-0.1.0.vsix
+npm run package          # compiles and writes llm-monitor-service-0.1.0.vsix
+code --install-extension llm-monitor-service-0.1.0.vsix
 ```
 
 Press **F5** in VS Code to run the extension in a development host instead.

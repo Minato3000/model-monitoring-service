@@ -1,6 +1,6 @@
 {
-  "name": "llm-monitoring-service",
-  "displayName": "LLM Server Monitor",
+  "name": "llm-monitor-service",
+  "displayName": "LLM Monitor Service",
   "description": "Live monitoring of running vLLM and SGLang containers in your VS Code sidebar: model, KV cache, requests, queue and tokens per second.",
   "version": "0.1.0",
   "publisher": "Minato3000",
@@ -41,27 +41,27 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "llm-monitoring-service-container",
-          "title": "LLM Server Monitor",
+          "id": "llm-monitor-service-container",
+          "title": "LLM Monitor Service",
           "icon": "icons/llm-monitor.svg"
         }
       ]
     },
     "views": {
-      "llm-monitoring-service-container": [
+      "llm-monitor-service-container": [
         {
           "type": "webview",
           "id": "llmmonitor.panel",
           "name": "Models",
           "icon": "icons/llm-monitor.svg",
-          "contextualTitle": "LLM Server Monitor"
+          "contextualTitle": "LLM Monitor Service"
         }
       ]
     },
     "commands": [
       {
         "command": "llmmonitor.refresh",
-        "title": "LLM Server Monitor: Refresh Now",
+        "title": "LLM Monitor Service: Refresh Now",
         "icon": "$(refresh)"
       }
     ],
@@ -75,7 +75,7 @@
       ]
     },
     "configuration": {
-      "title": "LLM Server Monitor",
+      "title": "LLM Monitor Service",
       "properties": {
         "llmmonitor.refreshInterval": {
           "type": "number",

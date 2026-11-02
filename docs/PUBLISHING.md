@@ -7,7 +7,7 @@ The extension is published to two registries from the same `.vsix`:
 | [Visual Studio Marketplace](https://marketplace.visualstudio.com/) | VS Code | `vsce` | `VSCE_PAT` (Azure DevOps personal access token) |
 | [Open VSX](https://open-vsx.org/) | VSCodium, Cursor, Gitpod, Eclipse Theia and others | `ovsx` | `OVSX_PAT` |
 
-Both registries identify the extension as `<publisher>.<name>`, here `Minato3000.llm-monitoring-service`.
+Both registries identify the extension as `<publisher>.<name>`, here `Minato3000.llm-monitor-service`.
 
 ## One-time setup
 
@@ -50,8 +50,8 @@ In the repository, **Settings → Secrets and variables → Actions**, add:
 To publish from your own machine instead:
 
 ```bash
-npx vsce publish --no-dependencies --packagePath llm-monitoring-service-0.1.0.vsix -p "$VSCE_PAT"
-npx ovsx publish llm-monitoring-service-0.1.0.vsix -p "$OVSX_PAT"
+npx vsce publish --no-dependencies --packagePath llm-monitor-service-0.1.0.vsix -p "$VSCE_PAT"
+npx ovsx publish llm-monitor-service-0.1.0.vsix -p "$OVSX_PAT"
 ```
 
 The workflow can also be started by hand (**Actions → Publish → Run workflow**) to publish to one registry only, for example when one of the two failed.
