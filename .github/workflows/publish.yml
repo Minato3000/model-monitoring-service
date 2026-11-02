@@ -1,0 +1,54 @@
+name: Publish
+# Publishes to the Visual Studio Marketplace and Open VSX when a GitHub release is published
+# (tag it v<version>, matching package.json). Can also be run by hand.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      marketplace:
+        description: Publish to the Visual Studio Marketplace
+        type: boolean
+        default: true
+      openvsx:
+        description: Publish to Open VSX
+        type: boolean
+        default: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Check the tag matches package.json
+        if: github.event_name == 'release'
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "${{ github.event.release.tag_name }}" = "v$v" ] || { echo "Tag ${{ github.event.release.tag_name }} does not match package.json version $v"; exit 1; }
+      - run: npm run compile
+      - run: node scripts/test-scenarios.js
+      - name: Package
+        run: npx vsce package --no-dependencies -o extension.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: extension.vsix
+      - name: Publish to the Visual Studio Marketplace
+        if: github.event_name == 'release' || inputs.marketplace
+        run: npx vsce publish --no-dependencies --packagePath extension.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Publish to Open VSX
+        if: github.event_name == 'release' || inputs.openvsx
+        run: npx ovsx publish extension.vsix
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      - name: Attach the .vsix to the GitHub release
+        if: github.event_name == 'release'
+        run: gh release upload "${{ github.event.release.tag_name }}" extension.vsix#llm-monitoring-service-${{ github.event.release.tag_name }}.vsix --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
